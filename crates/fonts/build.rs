@@ -61,11 +61,14 @@ fn craft_fonts(dir: &std::path::Path, required: bool) -> Result<String, String> 
         }
         let hebrew = dir.join("fonts/hebrew-manifest.txt");
         println!("cargo::rerun-if-changed={}", hebrew.display());
-        if hebrew.try_exists().unwrap_or(false) {
-            match manifest_dedup(dir, &hebrew, false, false, &mut seen_files) {
+        match hebrew.try_exists() {
+            Ok(false) => {}
+            Ok(true) => match manifest_dedup(dir, &hebrew, false, false, &mut seen_files) {
                 Ok(entries) => out.push_str(&entries),
                 Err(e) => println!("cargo::warning=skipping optional Hebrew fonts: {e}"),
-            }
+            },
+            Err(e) if required => return Err(format!("{}: {e}", hebrew.display())),
+            Err(e) => println!("cargo::warning=skipping optional Hebrew fonts: {}: {e}", hebrew.display()),
         }
     }
     Ok(out)
@@ -101,9 +104,6 @@ fn manifest_dedup(
         let [family, style, file, scripts, ..] = f.as_slice() else {
             return Err(format!("malformed manifest line: {line}"));
         };
-        if !seen_files.insert((*file).to_string()) {
-            continue;
-        }
         // Keep the upstream general CJK size cap. The separately pinned native Chinese UI
         // face has its own bound; web builds retain the smaller general limit. A required
         // Chinese face over its cap fails the build instead of being silently omitted.
@@ -135,6 +135,9 @@ fn manifest_dedup(
             || scripts.split(',').any(|s| s.trim() == "Thai")
             || devanagari;
         if wasm && !web_face {
+            continue;
+        }
+        if !seen_files.insert((*file).to_string()) {
             continue;
         }
         has_hans |= cjk_scripts::has_script_tag(scripts, "Hans");
@@ -178,6 +181,24 @@ mod manifest_tests {
         assert!(manifest(&root, &path, false, true).unwrap().contains("CraftFont {"));
         std::fs::remove_file(root.join("face.ttf")).unwrap();
         assert!(manifest(&root, &path, false, true).is_err(), "a missing Hans asset cannot satisfy required input");
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    /// Regression test: on wasm, a non-web manifest row for a font file must not prevent a later
+    /// web-eligible (`Hebr`) row for the same file from being emitted.
+    #[test]
+    fn wasm_manifest_dedup_records_only_emitted_files() {
+        let root = std::env::temp_dir().join(format!("pdfcraft-wasm-dedup-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("face.ttf"), b"synthetic manifest fixture").unwrap();
+        let path = root.join("manifest.txt");
+        std::fs::write(
+            &path,
+            "Fixture | Regular | face.ttf | Latn\nFixture | Regular | face.ttf | Hebr,Latn\n",
+        )
+        .unwrap();
+        let emitted = manifest(&root, &path, true, false).unwrap();
+        assert!(emitted.contains("CraftFont {"), "Hebr row must still be emitted on wasm");
         std::fs::remove_dir_all(root).unwrap();
     }
 }
