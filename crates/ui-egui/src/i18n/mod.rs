@@ -158,8 +158,17 @@ fn plural_sl(n: u64) -> usize {
     }
 }
 
+/// Hebrew (CLDR `he`, integer counts): one (1), two (2), other (0, 3+).
+fn plural_hebrew(n: u64) -> usize {
+    match n {
+        1 => 0,
+        2 => 1,
+        _ => 2,
+    }
+}
+
 /// The registry. English first: it is the fallback and the source language.
-pub static LANGUAGES: [LangInfo; 35] = [
+pub static LANGUAGES: [LangInfo; 36] = [
     LangInfo { code: "en", name: "English", source: "", plural: plural_one_other, rtl: false, catalog: OnceLock::new() },
     LangInfo { code: "ja", name: "日本語", source: include_str!("ja.tsv"), plural: plural_none, rtl: false, catalog: OnceLock::new() },
     // Simplified Chinese; `zh`, `zh-CN`, `zh-SG` and `zh-Hans-*` locales resolve here (see `candidates`).
@@ -257,6 +266,9 @@ pub static LANGUAGES: [LangInfo; 35] = [
     // Norwegian Bokmål; every `nb-*` locale resolves here, and so do general Norwegian (`no-*`) and
     // Nynorsk (`nn-*`), which have no catalog of their own (see `candidates`).
     LangInfo { code: "nb", name: "Norsk bokmål", source: include_str!("nb.tsv"), plural: plural_one_other, rtl: false, catalog: OnceLock::new() },
+    // Hebrew; every `he-*` and legacy `iw-*` locale (`he-IL`, `iw_IL.UTF-8`) resolves here.
+    // Right to left: see `LangInfo::rtl`. Three plural forms (one, two, other).
+    LangInfo { code: "he", name: "עברית", source: include_str!("he.tsv"), plural: plural_hebrew, rtl: true, catalog: OnceLock::new() },
 ];
 
 impl LangInfo {
@@ -383,6 +395,7 @@ impl Lang {
             "lo" => "Lao",
             "hi" => "Hindi",
             "ko" => "Korean",
+            "he" => "Hebrew",
             // Only reached if a language is added to `LANGUAGES` without an English name; the
             // code still tells the reader which entry it is.
             _ => self.0.code,
@@ -440,6 +453,10 @@ fn candidates(tag: &str) -> Vec<String> {
         // The only Norwegian catalog is Bokmål. `no` (Norwegian in general) and Nynorsk readers use
         // it rather than English; last, so a catalog of their own would win.
         out.push("nb".to_string());
+    }
+    if primary == "iw" {
+        // Legacy ISO 639-1 Hebrew tag (`iw`, `iw_IL.UTF-8`) maps to `he`.
+        out.push("he".to_string());
     }
     out
 }
@@ -1753,7 +1770,7 @@ mod tests {
         assert_eq!(ar.name(), "العربية");
         assert!(ar.rtl());
         let rtl: Vec<&str> = Lang::all().filter(|l| l.rtl()).map(|l| l.code()).collect();
-        assert_eq!(rtl, ["ar", "ckb", "fa"], "Arabic, Kurdish and Persian are the right-to-left languages");
+        assert_eq!(rtl, ["ar", "ckb", "fa", "he"], "Arabic, Kurdish, Persian and Hebrew are the right-to-left languages");
         assert_eq!(normalize_pref("AR"), Some("ar"));
         for tag in ["ar", "ar-MA", "ar_EG.UTF-8", "AR-sa", "ar_DZ@variant"] {
             assert_eq!(lang_from_tag(tag), Some(ar), "{tag}");
@@ -1834,6 +1851,32 @@ mod tests {
         assert_eq!(restored.language, "fa");
         assert!(restored.set_option("language", "xx").is_err());
         assert_eq!(restored.language, "fa");
+    }
+
+    #[test]
+    fn hebrew_is_registered_and_persists() {
+        let he = Lang::from_code("he").expect("he registered");
+        assert_eq!(he.name(), "עברית");
+        assert!(he.rtl());
+        assert_eq!(he.0.plural_forms(), 3);
+        assert_eq!([0, 1, 2, 3, 10].map(|n| (he.0.plural)(n)), [2, 0, 1, 2, 2]);
+        assert_eq!(normalize_pref("HE"), Some("he"));
+        for tag in ["he", "he-IL", "he_IL.UTF-8", "HE-il", "iw", "iw-IL", "iw_IL.UTF-8"] {
+            assert_eq!(lang_from_tag(tag), Some(he), "{tag}");
+        }
+        assert_eq!(first_supported("he-IL\r\nen-US"), Some(he));
+        assert_eq!(tr(he, "Save"), "שמירה");
+        assert_eq!(tr(he, "Cancel"), "ביטול");
+        assert_eq!(tr(he, "File"), "קובץ");
+        assert_eq!(tr(he, "דוח סופי {n}.pdf"), "דוח סופי {n}.pdf");
+        let mut app = crate::PdfCraftApp::default();
+        app.set_option("language", "HE").unwrap();
+        assert_eq!(app.language, "he");
+        let mut restored = crate::PdfCraftApp::default();
+        restored.restore(&app.persist());
+        assert_eq!(restored.language, "he");
+        assert!(restored.set_option("language", "xx").is_err());
+        assert_eq!(restored.language, "he");
     }
 
     /// With a craft-fonts Arabic face, every Arabic translation has glyphs: with all interface
