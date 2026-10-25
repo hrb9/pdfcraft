@@ -35,12 +35,13 @@ fn main() {
     }
 }
 
-/// The main manifest, plus the native-only Simplified Chinese manifest. The latter is optional
-/// for ordinary builds and required when `CRAFT_FONTS_REQUIRED` is set, so a required build can
-/// never pass the Chinese UI tests only by skipping them.
+/// The main manifest, plus the native-only Simplified Chinese and optional Hebrew manifests. The
+/// Chinese manifest is optional for ordinary builds and required when `CRAFT_FONTS_REQUIRED` is
+/// set, so a required build can never pass the Chinese UI tests only by skipping them.
 fn craft_fonts(dir: &std::path::Path, required: bool) -> Result<String, String> {
     let wasm = std::env::var("CARGO_CFG_TARGET_ARCH").is_ok_and(|a| a == "wasm32");
-    let mut out = manifest(dir, &dir.join("fonts/manifest.txt"), wasm, false)?;
+    let mut seen_files = std::collections::HashSet::new();
+    let mut out = manifest_dedup(dir, &dir.join("fonts/manifest.txt"), wasm, false, &mut seen_files)?;
     if !wasm {
         let chinese = dir.join("fonts/simplified-chinese-manifest.txt");
         println!("cargo::rerun-if-changed={}", chinese.display());
@@ -49,7 +50,7 @@ fn craft_fonts(dir: &std::path::Path, required: bool) -> Result<String, String> 
                 return Err(format!("{}: CRAFT_FONTS_REQUIRED is set but the simplified-Chinese font manifest is missing", chinese.display()));
             }
             Ok(false) => {}
-            Ok(true) => match manifest(dir, &chinese, false, required) {
+            Ok(true) => match manifest_dedup(dir, &chinese, false, required, &mut seen_files) {
                 Ok(entries) => out.push_str(&entries),
                 // A broken optional addition must never discard the main Japanese/symbol/RTL faces.
                 Err(e) if required => return Err(e),
@@ -57,6 +58,14 @@ fn craft_fonts(dir: &std::path::Path, required: bool) -> Result<String, String> 
             },
             Err(e) if required => return Err(format!("{}: {e}", chinese.display())),
             Err(e) => println!("cargo::warning=skipping optional Chinese fonts: {}: {e}", chinese.display()),
+        }
+        let hebrew = dir.join("fonts/hebrew-manifest.txt");
+        println!("cargo::rerun-if-changed={}", hebrew.display());
+        if hebrew.try_exists().unwrap_or(false) {
+            match manifest_dedup(dir, &hebrew, false, false, &mut seen_files) {
+                Ok(entries) => out.push_str(&entries),
+                Err(e) => println!("cargo::warning=skipping optional Hebrew fonts: {e}"),
+            }
         }
     }
     Ok(out)
@@ -67,7 +76,19 @@ fn craft_fonts(dir: &std::path::Path, required: bool) -> Result<String, String> 
 /// `strict_cap` is set for the required native Simplified Chinese manifest: a face that does not
 /// fit its cap must fail the build rather than be silently left out, so a required build cannot
 /// pass without the Chinese face it promises.
+#[cfg_attr(not(test), allow(dead_code))]
 fn manifest(dir: &std::path::Path, manifest: &std::path::Path, wasm: bool, strict_cap: bool) -> Result<String, String> {
+    let mut seen_files = std::collections::HashSet::new();
+    manifest_dedup(dir, manifest, wasm, strict_cap, &mut seen_files)
+}
+
+fn manifest_dedup(
+    dir: &std::path::Path,
+    manifest: &std::path::Path,
+    wasm: bool,
+    strict_cap: bool,
+    seen_files: &mut std::collections::HashSet<String>,
+) -> Result<String, String> {
     println!("cargo::rerun-if-changed={}", manifest.display());
     let text = std::fs::read_to_string(manifest).map_err(|e| format!("{}: {e}", manifest.display()))?;
     let mut out = String::new();
@@ -80,6 +101,9 @@ fn manifest(dir: &std::path::Path, manifest: &std::path::Path, wasm: bool, stric
         let [family, style, file, scripts, ..] = f.as_slice() else {
             return Err(format!("malformed manifest line: {line}"));
         };
+        if !seen_files.insert((*file).to_string()) {
+            continue;
+        }
         // Keep the upstream general CJK size cap. The separately pinned native Chinese UI
         // face has its own bound; web builds retain the smaller general limit. A required
         // Chinese face over its cap fails the build instead of being silently omitted.

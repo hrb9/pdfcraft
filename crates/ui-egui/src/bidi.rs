@@ -94,8 +94,9 @@ pub fn has_rtl(text: &str) -> bool {
 }
 
 /// The paragraph direction for translated interface text: explicitly right to left for Arabic,
-/// Kurdish and Persian, and `TextDirection::Auto` otherwise. A label whose first strong character is
-/// Latin or a `{placeholder}` must not fall back to a left-to-right paragraph in an RTL locale.
+/// Hebrew, Kurdish and Persian, and `TextDirection::Auto` otherwise. A label whose first strong
+/// character is Latin or a `{placeholder}` must not fall back to a left-to-right paragraph in an
+/// RTL locale.
 pub fn ui_direction() -> egui::epaint::text::TextDirection {
     if crate::i18n::current().rtl() { egui::epaint::text::TextDirection::RightToLeft } else { egui::epaint::text::TextDirection::Auto }
 }
@@ -422,6 +423,12 @@ mod tests {
     #[test]
     fn hebrew_and_brackets() {
         assert_eq!(visual("שלום עולם.pdf"), "עולם שלום.pdf");
+        assert_eq!(visual("מסמך (טיוטה) 2026.pdf"), "2026 (טיוטה) מסמך.pdf");
+        assert_eq!(display_rtl("ייצוא ל-Microsoft Word כעת"), "כעת Microsoft Word-ל ייצוא");
+        assert_eq!(display_rtl("עמוד {p} מתוך {n}"), "{n} מתוך {p} עמוד");
+        assert_eq!(wrap_at("מסמך PDF גרסה 2 מוכן", 80), [rtl("מסמך PDF גרסה 2 מוכן")]);
+        assert_eq!(visual_auto("צוות שלום עולם"), "עולם שלום צוות");
+        assert_eq!(visual_auto("Team שלום עולם"), "Team עולם שלום");
         // Brackets between right-to-left words flip with the direction.
         assert_eq!(visual("واحد (اثنين) ثلاثة.pdf"), "ثلاثة (اثنين) واحد.pdf");
     }
