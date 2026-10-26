@@ -192,11 +192,7 @@ mod manifest_tests {
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(root.join("face.ttf"), b"synthetic manifest fixture").unwrap();
         let path = root.join("manifest.txt");
-        std::fs::write(
-            &path,
-            "Fixture | Regular | face.ttf | Latn\nFixture | Regular | face.ttf | Hebr,Latn\n",
-        )
-        .unwrap();
+        std::fs::write(&path, "Fixture | Regular | face.ttf | Latn\nFixture | Regular | face.ttf | Hebr,Latn\n").unwrap();
         let emitted = manifest(&root, &path, true, false).unwrap();
         assert!(emitted.contains("CraftFont {"), "Hebr row must still be emitted on wasm");
         std::fs::remove_dir_all(root).unwrap();
