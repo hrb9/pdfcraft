@@ -470,6 +470,7 @@ fn tab(
     theme::hand(resp).on_hover_text(if dirty { crate::i18n::fmt(tl!("{name} — unsaved changes"), &[("name", &shown)]) } else { shown })
 }
 
+/// Draw the top mode bar with the main menu, mode tabs and document actions.
 pub fn mode_bar(app: &mut PdfCraftApp, ui: &mut egui::Ui) {
     let t = Tokens::get(ui.ctx());
     let rtl = crate::i18n::current().rtl();

@@ -1760,10 +1760,12 @@ mod tests {
         }
     }
 
+    /// Returns the registered Arabic language entry.
     fn arabic() -> Lang {
         Lang::from_code("ar").expect("ar registered")
     }
 
+    /// Verifies that Arabic is registered as an RTL language and persists across settings saves.
     #[test]
     fn arabic_is_registered_and_persists() {
         let ar = arabic();
@@ -1853,6 +1855,7 @@ mod tests {
         assert_eq!(restored.language, "fa");
     }
 
+    /// Verifies that Hebrew (`he`) and legacy `iw` tags resolve, use 3 plural forms, and persist.
     #[test]
     fn hebrew_is_registered_and_persists() {
         let he = Lang::from_code("he").expect("he registered");
