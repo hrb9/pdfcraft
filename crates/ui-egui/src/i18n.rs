@@ -300,14 +300,7 @@ pub static LANGUAGES: [LangInfo; 36] = [
     },
     // Hebrew; every `he-*` and legacy `iw-*` locale (`he-IL`, `iw_IL.UTF-8`) resolves here.
     // Right to left: see `LangInfo::rtl`. Three plural forms (one, two, other).
-    LangInfo {
-        code: "he",
-        name: "עברית",
-        source: include_str!("i18n/he.tsv"),
-        plural: plural_hebrew,
-        rtl: true,
-        catalog: OnceLock::new(),
-    },
+    LangInfo { code: "he", name: "עברית", source: include_str!("i18n/he.tsv"), plural: plural_hebrew, rtl: true, catalog: OnceLock::new() },
 ];
 
 impl LangInfo {
